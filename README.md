@@ -102,3 +102,71 @@ pm2 start app-js -i -1 # auto
 pm2 logs
 pm2 monit
 ```
+
+## Databases
+
+### Incorporating database
+
+```js
+const http = require("http");
+const { LocalStorage } = require("node-localstorage");
+
+const db = new LocalStorage("./data");
+
+const server = http.createServer((req, res) => {
+  if (req.url === "/") {
+    let requests = db.getItem("requests");
+    db.setItem("requests", ++requests);
+    console.log(`${process.pid}: ${requests}`);
+
+    res.end(JSON.stringify(requests));
+  }
+});
+
+server.listen(3000);
+console.log(`counting requests`);
+```
+
+### Horizontal partitioning (sharding)
+
+```js
+const { LocalStorage } = require("node-localstorage");
+
+const dbA = new LocalStorage("data-a-m");
+const dbB = new LocalStorage("data-m-z");
+
+const whichDB = name => (name.match(/^[A-M]|^[a-m]/) ? dbA : dbB);
+
+const loadCats = db => JSON.parse(db.getItem("cats") || "[]");
+
+const hasCat = name =>
+  loadCats(whichDB(name))
+    .map(cat => cat.name)
+    .includes(name);
+
+module.exports = {
+  addCat(newCat) {
+    if (!hasCat(newCat.name)) {
+      let db = whichDB(newCat.name);
+      let cats = loadCats(db);
+      cats.push(newCat);
+      db.setItem("cats", JSON.stringify(cats, null, 2));
+    }
+  },
+
+  findCatByName(name) {
+    let db = whichDB(name);
+    let cats = loadCats(db);
+    return cats.find(cat => cat.name === name);
+  },
+
+  findCatsByColor(color) {
+    return [
+      ...loadCats(dbA).filter(cat => cat.color === color),
+      ...loadCats(dbB).filter(cat => cat.color === color),
+    ];
+  },
+};
+```
+
+## 
